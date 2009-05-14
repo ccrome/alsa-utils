@@ -124,6 +124,7 @@
 #include <time.h>
 
 #include <alsa/asoundlib.h>
+#include <alsa/mixer_old.h>
 #include "aconfig.h"
 
 /* example compilation commandline:

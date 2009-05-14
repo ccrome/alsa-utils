@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <alsa/asoundlib.h>
+#include <alsa/mixer_old.h>
 #include <sys/poll.h>
 #include "amixer.h"
 
