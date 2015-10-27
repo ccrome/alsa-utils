@@ -160,7 +160,7 @@ static int set_snd_pcm_params(struct bat *bat, struct pcm_container *sndpcm)
 			&sndpcm->period_size, 0);
 	if (err < 0) {
 		fprintf(bat->err, _("Get parameter from device error: "));
-		fprintf(bat->err, _("period size: %zd %s: %s(%d)\n"),
+		fprintf(bat->err, _("period size: %lu %s: %s(%d)\n"),
 				sndpcm->period_size,
 				device_name, snd_strerror(err), err);
 		return err;
@@ -169,7 +169,7 @@ static int set_snd_pcm_params(struct bat *bat, struct pcm_container *sndpcm)
 	err = snd_pcm_hw_params_get_buffer_size(params, &sndpcm->buffer_size);
 	if (err < 0) {
 		fprintf(bat->err, _("Get parameter from device error: "));
-		fprintf(bat->err, _("buffer size: %zd %s: %s(%d)\n"),
+		fprintf(bat->err, _("buffer size: %lu %s: %s(%d)\n"),
 				sndpcm->buffer_size,
 				device_name, snd_strerror(err), err);
 		return err;
@@ -177,7 +177,7 @@ static int set_snd_pcm_params(struct bat *bat, struct pcm_container *sndpcm)
 
 	if (sndpcm->period_size == sndpcm->buffer_size) {
 		fprintf(bat->err, _("Invalid parameters: can't use period "));
-		fprintf(bat->err, _("equal to buffer size (%zd)\n"),
+		fprintf(bat->err, _("equal to buffer size (%lu)\n"),
 				sndpcm->period_size);
 		return -EINVAL;
 	}
