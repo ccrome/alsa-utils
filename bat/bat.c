@@ -73,16 +73,30 @@ err_exit:
 
 static void get_sine_frequencies(struct bat *bat, char *freq)
 {
-	char *tmp1;
-
-	tmp1 = strchr(freq, ':');
-	if (tmp1 == NULL) {
-		bat->target_freq[1] = bat->target_freq[0] = atof(optarg);
-	} else {
-		*tmp1 = '\0';
-		bat->target_freq[0] = atof(optarg);
-		bat->target_freq[1] = atof(tmp1 + 1);
+	char *tmp0, *tmp1;
+	int ncolons;
+	int nfreqs;
+	int i;
+	ncolons = 0;
+	tmp1 = freq;
+	while ((tmp1 = strchr(tmp1, ':'))) {
+		tmp1++;
+		ncolons ++;
 	}
+	nfreqs = ncolons+1;
+
+	tmp0 = freq;
+	tmp1 = strchr(tmp0, ':');
+	for (i = 0; i < MAX_CHANNELS && i < nfreqs; i++) {
+		if (i+1 < nfreqs)
+			*tmp1 = '\0';
+		bat->target_freq[i] = atof(tmp0);
+		tmp0 = tmp1+1;
+		if (i+1 < nfreqs)
+			tmp1 = strchr(tmp0, ':');
+	}
+	for (i = nfreqs; i < MAX_CHANNELS; i++)
+		bat->target_freq[i] = bat->target_freq[i % nfreqs];
 }
 
 static void get_format(struct bat *bat, char *optarg)
@@ -302,6 +316,7 @@ _("Usage: bat [-options]...\n"
 
 static void set_defaults(struct bat *bat)
 {
+	int i;
 	memset(bat, 0, sizeof(struct bat));
 
 	/* Set default values */
@@ -313,8 +328,8 @@ static void set_defaults(struct bat *bat)
 	bat->convert_float_to_sample = convert_float_to_int16;
 	bat->convert_sample_to_double = convert_int16_to_double;
 	bat->frames = bat->rate * 2;
-	bat->target_freq[0] = 997.0;
-	bat->target_freq[1] = 997.0;
+	for (i = 0; i < MAX_CHANNELS; i++)
+		bat->target_freq[i] = 997.0;
 	bat->sigma_k = 3.0;
 	bat->playback.device = NULL;
 	bat->capture.device = NULL;

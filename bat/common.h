@@ -30,7 +30,7 @@
 #define WAV_DATA			COMPOSE('d', 'a', 't', 'a')
 #define WAV_FORMAT_PCM			1	/* PCM WAVE file encoding */
 
-#define MAX_CHANNELS			2
+#define MAX_CHANNELS			64
 #define MIN_CHANNELS			1
 #define MAX_PEAKS			10
 #define MAX_FRAMES			(10 * 1024 * 1024)
