@@ -20,7 +20,8 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
-#include <getopt.h>
+#include <argp.h>
+#include <error.h>
 #include <math.h>
 #include <limits.h>
 #include <locale.h>
@@ -283,37 +284,6 @@ static void test_capture(struct bat *bat)
 	}
 }
 
-static void usage(struct bat *bat)
-{
-	fprintf(bat->log,
-_("Usage: bat [-options]...\n"
-"\n"
-"  -h, --help             this help\n"
-"  -D                     pcm device for both playback and capture\n"
-"  -P                     pcm device for playback\n"
-"  -C                     pcm device for capture\n"
-"  -f                     sample format\n"
-"  -c                     number of channels\n"
-"  -r                     sampling rate\n"
-"  -n                     frames to playback or capture\n"
-"  -k                     parameter for frequency detecting threshold\n"
-"  -F                     target frequency\n"
-"  -p                     total number of periods to play/capture\n"
-"      --log=#            file that both stdout and strerr redirecting to\n"
-"      --file=#           file for playback\n"
-"      --saveplay=#       file that storing playback content, for debug\n"
-"      --local            internal loop, set to bypass pcm hardware devices\n"
-));
-	fprintf(bat->log, _("Recognized sample formats are: %s %s %s %s\n"),
-			snd_pcm_format_name(SND_PCM_FORMAT_U8),
-			snd_pcm_format_name(SND_PCM_FORMAT_S16_LE),
-			snd_pcm_format_name(SND_PCM_FORMAT_S24_3LE),
-			snd_pcm_format_name(SND_PCM_FORMAT_S32_LE));
-	fprintf(bat->log, _("The available format shotcuts are:\n"));
-	fprintf(bat->log, _("-f cd (16 bit little endian, 44100, stereo)\n"));
-	fprintf(bat->log, _("-f dat (16 bit little endian, 48000, stereo)\n"));
-}
-
 static void set_defaults(struct bat *bat)
 {
 	int i;
@@ -344,82 +314,136 @@ static void set_defaults(struct bat *bat)
 	bat->err = stderr;
 }
 
+
+static error_t parse_opt (int key, char *arg, struct argp_state *state)
+{
+	struct bat *bat = state->input;
+	switch (key) {
+	case OPT_LOG:
+		bat->logarg = arg;
+		break;
+	case OPT_READFILE:
+		bat->playback.file = arg;
+		break;
+	case OPT_SAVEPLAY:
+		bat->debugplay = arg;
+		break;
+	case OPT_LOCAL:
+		bat->local = true;
+		break;
+	case 'D':
+		if (bat->playback.device == NULL)
+			bat->playback.device = arg;
+		if (bat->capture.device == NULL)
+			bat->capture.device = arg;
+		break;
+	case 'P':
+		if (bat->capture.mode == MODE_SINGLE)
+			bat->capture.mode = MODE_LOOPBACK;
+		else
+			bat->playback.mode = MODE_SINGLE;
+		bat->playback.device = arg;
+		break;
+	case 'C':
+		if (bat->playback.mode == MODE_SINGLE)
+			bat->playback.mode = MODE_LOOPBACK;
+		else
+			bat->capture.mode = MODE_SINGLE;
+		bat->capture.device = arg;
+		break;
+	case 'n':
+		bat->narg = arg;
+		break;
+	case 'F':
+		get_sine_frequencies(bat, arg);
+		break;
+	case 'c':
+		bat->channels = atoi(arg);
+		break;
+	case 'r':
+		bat->rate = atoi(arg);
+		break;
+	case 'f':
+		get_format(bat, arg);
+		break;
+	case 'k':
+		bat->sigma_k = atof(arg);
+		break;
+	case 'p':
+		bat->periods_total = atoi(arg);
+		bat->period_is_limited = true;
+		break;
+	default:
+		return ARGP_ERR_UNKNOWN;
+		break;
+	}
+	return 0;
+}
 static void parse_arguments(struct bat *bat, int argc, char *argv[])
 {
-	int c, option_index;
-	static const char short_options[] = "D:P:C:f:n:F:c:r:s:k:p:lth";
-	static const struct option long_options[] = {
-		{"help",     0, 0, 'h'},
-		{"log",      1, 0, OPT_LOG},
-		{"file",     1, 0, OPT_READFILE},
-		{"saveplay", 1, 0, OPT_SAVEPLAY},
-		{"local",    0, 0, OPT_LOCAL},
-		{0, 0, 0, 0}
+
+	const char *doc =
+		_("Basic Audio Tester\n"
+		  "\n"
+		  "Uses a loopback configuration or 2 PC configuration "
+		  "(play on one PC and record on the other) to test "
+		  "if if audio is flowing smoothly."
+		  "\n"
+		  "Full documentation in the bat man page and at "
+		  "https://github.com/01org/bat/wiki"
+		  "\n"
+		  "Recognized sample formats are: %s %s %s %s\n"
+		  "The available format shotcuts are:\n"
+		  "\t-f cd (16 bit little endian, 44100, stereo)\n"
+		  "\t-f dat (16 bit little endian, 48000, stereo)\n");
+
+	const char args_doc[] = "";
+
+	struct argp_option options[] = {
+		{"log", OPT_LOG, "FILENAME", 0,
+		 _("file that both stdout and strerr redirecting to"), 0},
+		{"file", OPT_READFILE, "FILENAME", 0,
+		 _("file for playback"),0},
+		{"saveplay", OPT_SAVEPLAY, "FILENAME", 0,
+		 _("file for storing playback content, for debug"), 0},
+		{"local", OPT_LOCAL, 0, 0,
+		 _("internal loopback, set to bypass pcm hardware devices"),0},
+		{"device-duplex", 'D', "DEVICE", 0,
+		 _("pcm device for both playback and capture"), 0},
+		{"device-playback", 'P', "DEVICE", 0,
+		 _("pcm device for playback"), 0},
+		{"device-capture", 'C', "DEVICE", 0,
+		 _("pcm device for capture"), 0},
+		{"sample_format" , 'f', "FORMAT", 0,
+		 _("sample format"), 0},
+		{"channels", 'c', "CHANNELS", 0,
+		 _("number of channels"), 0},
+		{"sample-rate", 'r', "SAMP/SEC", 0,
+		 _("sampling rate"), 0},
+		{"frames", 'n', "FRAMES", 0,
+		 _("The number of frames for playback and/or capture"), 0},
+		{"threshold", 'k', "THRESHOLD", 0,
+		 _("parameter for frequency detecting threshold"), 0},
+		{"target-frequency", 'F', "FREQUENCY", 0,
+		 _("target frequency for sin test "), 0},
+		{"periods", 'p', "PERIODS", 0,
+		 _("total number of periods to play/capture"), 0},
+		{ 0 }
 	};
 
-	while ((c = getopt_long(argc, argv, short_options, long_options,
-					&option_index)) != -1) {
-		switch (c) {
-		case OPT_LOG:
-			bat->logarg = optarg;
-			break;
-		case OPT_READFILE:
-			bat->playback.file = optarg;
-			break;
-		case OPT_SAVEPLAY:
-			bat->debugplay = optarg;
-			break;
-		case OPT_LOCAL:
-			bat->local = true;
-			break;
-		case 'D':
-			if (bat->playback.device == NULL)
-				bat->playback.device = optarg;
-			if (bat->capture.device == NULL)
-				bat->capture.device = optarg;
-			break;
-		case 'P':
-			if (bat->capture.mode == MODE_SINGLE)
-				bat->capture.mode = MODE_LOOPBACK;
-			else
-				bat->playback.mode = MODE_SINGLE;
-			bat->playback.device = optarg;
-			break;
-		case 'C':
-			if (bat->playback.mode == MODE_SINGLE)
-				bat->playback.mode = MODE_LOOPBACK;
-			else
-				bat->capture.mode = MODE_SINGLE;
-			bat->capture.device = optarg;
-			break;
-		case 'n':
-			bat->narg = optarg;
-			break;
-		case 'F':
-			get_sine_frequencies(bat, optarg);
-			break;
-		case 'c':
-			bat->channels = atoi(optarg);
-			break;
-		case 'r':
-			bat->rate = atoi(optarg);
-			break;
-		case 'f':
-			get_format(bat, optarg);
-			break;
-		case 'k':
-			bat->sigma_k = atof(optarg);
-			break;
-		case 'p':
-			bat->periods_total = atoi(optarg);
-			bat->period_is_limited = true;
-			break;
-		case 'h':
-		default:
-			usage(bat);
-			exit(EXIT_SUCCESS);
-		}
-	}
+	char *doc_filled;
+	const int num_formats = 4; // # formats supported below.
+	const int doc_size = strlen(doc) + 40*num_formats;
+	doc_filled = malloc(doc_size);
+	snprintf(doc_filled, doc_size, doc,
+		 snd_pcm_format_name(SND_PCM_FORMAT_U8),
+		 snd_pcm_format_name(SND_PCM_FORMAT_S16_LE),
+		 snd_pcm_format_name(SND_PCM_FORMAT_S24_3LE),
+		 snd_pcm_format_name(SND_PCM_FORMAT_S32_LE));
+
+	struct argp  argp = {options, parse_opt, args_doc, doc_filled};
+	argp_parse(&argp, argc, argv, 0, 0, bat);
+	free(doc_filled);
 }
 
 static int validate_options(struct bat *bat)
@@ -498,6 +522,7 @@ static int bat_init(struct bat *bat)
 			fprintf(bat->err, _("Fail to create record file: %d\n"),
 					-errno);
 			return -errno;
+
 		}
 		/* store file name which is dynamically created */
 		bat->capture.file = strdup(name);
